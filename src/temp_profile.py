@@ -1,78 +1,11 @@
 from dataclasses import dataclass, field
+from eutecticInterface import euteticInterface
 
 import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-@dataclass(frozen = True)
-class euteticInterface:
-    eutectic_df: pd.DataFrame
-    relative_eutectic_depth: np.ndarray = field(metadata={'unit':'Relative Depth Penetration Percentage'})
-    eutectic_depth: np.ndarray = field(metadata={'unit':'Kilometers'})
-    longitude: np.ndarray
-
-    minumum_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
-    maximum_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
-    mean_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
-    std: float = field(metadata={'unit': 'Kilometers'}, init = False)
-
-
-    def __post_init__(self):
-        object.__setattr__(self, 'minumum_depth', np.min(self.eutectic_depth))
-        object.__setattr__(self, 'maximum_depth', np.max(self.eutectic_depth))
-        object.__setattr__(self, 'mean_depth', np.mean(self.eutectic_depth))
-        object.__setattr__(self, 'std', np.std(self.eutectic_depth))
-    
-    @classmethod
-    def from_temp2D(cls, TempProfile2D) -> 'euteticInterface': # should go in eutetic class
-        df_list = []
-        big_depth_array = TempProfile2D.depth_array.reshape([TempProfile2D.nCellsPerShell,  TempProfile2D.nShells])
-        big_temp_array =  TempProfile2D.temp_array.reshape([TempProfile2D.nCellsPerShell, TempProfile2D.nShells])
-        shell_indexes = np.linspace(1, TempProfile2D.nShells, TempProfile2D.nShells)
-
-        for radial_depth_array, radial_temp_array, shell_number in zip(big_depth_array.T, big_temp_array.T, shell_indexes):
-            small_df_dict = {
-                'shell_number': np.linspace(shell_number, shell_number, TempProfile2D.nCellsPerShell),
-                'depth': radial_depth_array[::-1],
-                'temp': radial_temp_array[::-1]
-            }
-            small_df = pd.DataFrame(small_df_dict)
-            df_list.append(small_df)
-
-        big_df = pd.concat(df_list)
-        eutectic_df = (big_df.query("temp <= 240").groupby(['shell_number'])['depth'].max()).reset_index()
-        eutectic_df['relative_depth'] = (eutectic_df['depth']/TempProfile2D.d_ice)*100
-        eutectic_df['longitude'] = (eutectic_df['shell_number']/TempProfile2D.nShells)*62
-        eutectic_df['temp'] = big_df.query("temp <= 240").groupby(['shell_number'])['temp'].max().values
-
-        return cls(
-        eutectic_df = eutectic_df,
-        relative_eutectic_depth = eutectic_df['relative_depth'], 
-        eutectic_depth = eutectic_df['depth'],
-        longitude = eutectic_df['longitude']
-        )
-    
-
-    def save_eutectic_data(self, folderpath):
-        to_save_df = self.eutectic_df
-
-        to_save_df.rename(columns = {'depth': 'Depth [Km]', 
-                                        'shell_number': 'Shell Number', 
-                                        'relative_depth':'Relative Depth [%]', 
-                                        'longitude': 'Longitude [°]',
-                                        'temp': 'Temperature [K]'}, inplace = True)
-
-        eutetic_df_filename = self.filename.replace("_2D_data.txt", '_2D_eutectic_data.txt') 
-        to_save_df.to_csv(folderpath+eutetic_df_filename, index = False)
-
-        
-    def __repr__(self):
-        return f'''Angular Ratio: {np.max(self.angular_ratio)},
-Standard Deviation: {self.std} Km,
-Relative Depth Penetration Range: {self.minumum_depth} - {self.maximum_depth} Km'''
-    
 
 
 
@@ -88,7 +21,7 @@ class TempProfile1D:
     Rs: float = field(metadata = {'unit': 'meters'}, init = False, repr=False)
     To: float = field(metadata = {'unit': 'kelvin'}, init = False, repr=False)
     Ts: float = field(metadata = {'unit': 'kelvin'}, init = False, repr=False)
-    d_ice: float = field(metadata = {'unit': 'kelvin'}, init = False, repr=False)
+    d_ice: float = field(metadata = {'unit': 'meters'}, init = False, repr=False)
     depth_array: np.ndarray = field(metadata={'unit':'meters'}, init=False, repr=False)
     resolution: float = field(metadata= {'unit': 'meters'}, init=False, repr=False)
 
@@ -148,7 +81,7 @@ class TempProfile2D(TempProfile1D):
 
     
     def plot_relative_eutectic_depth(self, folderpath = False):
-        sns.lineplot(x = self.eutectic_interface.longitude, y = self.eutectic_interface.relative_eutectic_depth)
+        sns.lineplot(x = self.eutectic_interface.longitude_span, y = self.eutectic_interface.relative_eutectic_depth)
 
         plt.xlabel('Longitude [°]', fontsize = 12)
         plt.ylabel('Relative Pen. Depth [%]', fontsize = 12)
@@ -175,7 +108,7 @@ class TempProfile2D(TempProfile1D):
         twod_y_array = self.y_array.reshape([self.nCellsPerShell,  self.nShells])
         twod_temp_array = self.temp_array.reshape([self.nCellsPerShell,  self.nShells])
 
-        fig, ax = plt.subplots(1, 1, figsize = (2, 4), dpi = 250)
+        fig, ax = plt.subplots(1, 1, figsize = (4.5, 10))
         fontsize = 8
 
         cmap = sns.color_palette("inferno", as_cmap = True)
