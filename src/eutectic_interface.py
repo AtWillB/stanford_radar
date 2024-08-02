@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-
 import matplotlib.pyplot as plt
+
 import seaborn as sns
 from matplotlib import collections  as mc
 from scipy.signal import argrelextrema # whats different?
@@ -13,10 +13,10 @@ from scipy import fft
 
 
 @dataclass(frozen = True)
-class euteticInterface:
-    eutectic_df: pd.DataFrame
-    relative_eutectic_depth: np.ndarray = field(metadata={'unit':'Relative Depth Penetration Percentage'})
-    eutectic_depth: np.ndarray = field(metadata={'unit':'Kilometers'})
+class EuteticInterface:
+    df: pd.DataFrame
+    relative_depth: np.ndarray = field(metadata={'unit':'Relative Depth Penetration Percentage'})
+    depth: np.ndarray = field(metadata={'unit':'Kilometers'})
     longitude_span: np.ndarray
     d_ice: float = field(metadata = {'unit': 'Kilometers'})
 
@@ -24,28 +24,32 @@ class euteticInterface:
     maximum_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
     mean_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
     std: float = field(metadata={'unit': 'Kilometers'}, init = False)
-    convection_cell_heights: np.ndarray = field(metadata={'unit': 'Kilometers'}, init = False)
+    upwelling_heights: np.ndarray = field(metadata={'unit': 'Kilometers'}, init = False)
+    downwelling_heights: np.ndarray = field(metadata={'unit': 'Kilometers'}, init = False)
+    chir: np.ndarray = field(init = False) # Convective Height Imbalance Ratio
     num_of_convection_cells: int = field(init = False)
-    avg_convection_cell_height: float = field(metadata = {'unit': 'Kilometers'}, init =False)
+    avg_upwelling_depth: float = field(metadata = {'unit': 'Kilometers'}, init =False)
 
 
     def __post_init__(self):
-        object.__setattr__(self, 'minumum_depth', np.min(self.eutectic_depth))
-        object.__setattr__(self, 'maximum_depth', np.max(self.eutectic_depth))
-        object.__setattr__(self, 'mean_depth', np.mean(self.eutectic_depth))
-        object.__setattr__(self, 'std', np.std(self.eutectic_depth))
-        depth_to_ocean = self.d_ice - self.eutectic_depth
-        object.__setattr__(self, 'convection_cell_heights', depth_to_ocean[find_peaks(depth_to_ocean)[0]])
+        object.__setattr__(self, 'minumum_depth', np.min(self.depth))
+        object.__setattr__(self, 'maximum_depth', np.max(self.depth))
+        object.__setattr__(self, 'mean_depth', np.mean(self.depth))
+        object.__setattr__(self, 'std', np.std(self.depth))
+        depth_to_ocean = self.d_ice - self.depth
+        object.__setattr__(self, 'upwelling_heights', depth_to_ocean[find_peaks(depth_to_ocean)[0]])
+        object.__setattr__(self, 'downwelling_heights', depth_to_ocean[find_peaks(-depth_to_ocean)[0]])
         if self.std > 0.01:
-            object.__setattr__(self, 'num_of_convection_cells', self.convection_cell_heights.shape[0])
-            object.__setattr__(self, 'avg_convection_cell_height', np.mean(self.convection_cell_heights))
+            object.__setattr__(self, 'num_of_convection_cells', self.upwelling_heights.shape[0])
+            object.__setattr__(self, 'avg_upwelling_depth', self.d_ice - np.mean(self.upwelling_heights))
         else:
             object.__setattr__(self, 'num_of_convection_cells', 0)
-            object.__setattr__(self, 'avg_convection_cell_height', 0)
+            object.__setattr__(self, 'avg_upwelling_height', 0)
+        object.__setattr__(self, 'chir', (sum(self.upwelling_heights) - sum(self.downwelling_heights))/self.num_of_convection_cells)
     
 
     @classmethod
-    def from_temp2D(cls, TempProfile2D) -> 'euteticInterface': # should go in eutetic class
+    def from_temp2D(cls, TempProfile2D) -> 'EuteticInterface': # should go in eutetic class
         df_list = []
         big_depth_array = TempProfile2D.depth_array.reshape([TempProfile2D.nCellsPerShell,  TempProfile2D.nShells])
         big_temp_array =  TempProfile2D.temp_array.reshape([TempProfile2D.nCellsPerShell, TempProfile2D.nShells])
@@ -67,9 +71,9 @@ class euteticInterface:
         eutectic_df['temp'] = big_df.query("temp <= 240").groupby(['shell_number'])['temp'].max().values
 
         return cls(
-        eutectic_df = eutectic_df,
-        relative_eutectic_depth = eutectic_df['relative_depth'].values, 
-        eutectic_depth = eutectic_df['depth'].values,
+        df = eutectic_df,
+        relative_depth = eutectic_df['relative_depth'].values, 
+        depth = eutectic_df['depth'].values,
         longitude_span = eutectic_df['longitude'].values,
         d_ice = TempProfile2D.d_ice
         )
@@ -77,7 +81,7 @@ class euteticInterface:
 
     def calc_sparse_eutectic(self, plot = True, depth_limit = True):
 
-        number_of_groups = np.linspace(0, self.relative_eutectic_depth.shape[0]-1, 25, dtype = int)
+        number_of_groups = np.linspace(0, self.relative_depth.shape[0]-1, 25, dtype = int)
         line_segment_list = []
 
 
@@ -85,7 +89,7 @@ class euteticInterface:
             curr_index = np.where(number_of_groups == group_index)[0][0]
             dice_roll = np.random.randint(1, 10)
 
-            line_segment_depth = self.relative_eutectic_depth[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
+            line_segment_depth = self.relative_depth[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
             line_segment_angular = self.longitude_span[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
 
             if dice_roll < 7:
@@ -95,8 +99,8 @@ class euteticInterface:
             line_segment_list.append(line_segment)
         
         # if depth_limit is True:
-        #     depth_min = np.min(self.relative_eutectic_depth)
-        #     depth_max = np.max(self.relative_eutectic_depth)
+        #     depth_min = np.min(self.relative_depth)
+        #     depth_max = np.max(self.relative_depth)
         #     if int(depth_min) - int(depth_min) == 0:
         #         relative_pen_limit = np.random.randint(int(depth_min)-2, int(depth_max) + 3)
         #     else:
@@ -155,7 +159,7 @@ class euteticInterface:
         lc = mc.LineCollection(new_plotting_list, linewidths=2)
         fig, ax = plt.subplots()
         ax.add_collection(lc)
-        ax.set_ylim(np.min(self.relative_eutectic_depth)-0.5, np.max(self.relative_eutectic_depth)+0.5)
+        ax.set_ylim(np.min(self.relative_depth)-0.5, np.max(self.relative_depth)+0.5)
         ax.set_xlim(0,np.max(self.longitude_span))
         ax.invert_yaxis()
 
@@ -166,7 +170,7 @@ class euteticInterface:
         plt.show()
 
     
-    def plot_fft(self, depth_array):
+    def plot_fft(self, depth_array): # might be worth it to look at seting up a class just for this & for sparsity stuff
         yf = np.abs(fft.rfft(depth_array))
         xf = fft.rfftfreq(len(depth_array))
         yf[0] = 0
@@ -189,20 +193,6 @@ class euteticInterface:
         ax.set_xlim(0, .01)
         plt.show()
 
-
-    
-
-    def save_eutectic_data(self, folderpath):
-        to_save_df = self.eutectic_df
-
-        to_save_df.rename(columns = {'depth': 'Depth [Km]', 
-                                        'shell_number': 'Shell Number', 
-                                        'relative_depth':'Relative Depth [%]', 
-                                        'longitude': 'Longitude [°]',
-                                        'temp': 'Temperature [K]'}, inplace = True)
-
-        eutetic_df_filename = self.filename.replace("_2D_data.txt", '_2D_eutectic_data.txt') 
-        to_save_df.to_csv(folderpath+eutetic_df_filename, index = False)
 
         
     def __repr__(self):

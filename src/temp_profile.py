@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from eutecticInterface import euteticInterface
+from eutectic_interface import EuteticInterface
 
 import numpy as np
 import pandas as pd
@@ -68,7 +68,7 @@ class TempProfile2D(TempProfile1D):
     unique_radius_array: np.ndarray = field(metadata={'unit':'Kilometers'}, init = False)
     nCellsPerShell: int = field(init=False)
     nShells: int = field(init=False)
-    eutectic_interface: euteticInterface = field(init = False)
+    eutectic: EuteticInterface = field(init = False)
 
 
     def __post_init__(self):
@@ -77,11 +77,11 @@ class TempProfile2D(TempProfile1D):
         object.__setattr__(self, 'unique_radius_array', np.unique(self.radius_array, return_counts=True))
         object.__setattr__(self, 'nShells', np.max(self.unique_radius_array[1]))
         object.__setattr__(self, 'nCellsPerShell', int(len(self.radius_array)/self.nShells))
-        object.__setattr__(self, 'eutectic_interface', euteticInterface.from_temp2D(self))
+        object.__setattr__(self, 'eutectic', EuteticInterface.from_temp2D(self))
 
     
     def plot_relative_eutectic_depth(self, folderpath = False):
-        sns.lineplot(x = self.eutectic_interface.longitude_span, y = self.eutectic_interface.relative_eutectic_depth)
+        sns.lineplot(x = self.eutectic.longitude_span, y = self.eutectic.relative_depth)
 
         plt.xlabel('Longitude [°]', fontsize = 12)
         plt.ylabel('Relative Pen. Depth [%]', fontsize = 12)
@@ -92,7 +92,7 @@ class TempProfile2D(TempProfile1D):
         plt.grid()
 
         ax = plt.gca()
-        ax.set_ylim(np.min(self.eutectic_interface.relative_eutectic_depth)-0.5, np.max(self.eutectic_interface.relative_eutectic_depth)+0.5)
+        ax.set_ylim(np.min(self.eutectic.relative_depth)-0.5, np.max(self.eutectic.relative_depth)+0.5)
         ax.set_xlim(0,62)
         ax.invert_yaxis()
 
@@ -117,6 +117,19 @@ class TempProfile2D(TempProfile1D):
         conjtourplot = ax.contourf(twod_x_array, twod_y_array, twod_temp_array, np.linspace(self.Ts, self.To,256), cmap = cmap, extend="both")
         ax.axis('off')
         plt.show()
+
+    
+    def save_eutectic_data(self, folderpath):
+        to_save_df = self.eutectic.df
+
+        to_save_df.rename(columns = {'depth': 'Depth [Km]', 
+                                        'shell_number': 'Shell Number', 
+                                        'relative_depth':'Relative Depth [%]', 
+                                        'longitude': 'Longitude [°]',
+                                        'temp': 'Temperature [K]'}, inplace = True)
+
+        eutetic_df_filename = self.filename.replace("_2D_data.txt", '_2D_eutectic_data.txt') 
+        to_save_df.to_csv(folderpath+eutetic_df_filename, index = False)
     
 
 
