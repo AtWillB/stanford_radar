@@ -17,7 +17,7 @@ class EuteticInterface:
     df: pd.DataFrame
     relative_depth: np.ndarray = field(metadata={'unit':'Relative Depth Penetration Percentage'})
     depth: np.ndarray = field(metadata={'unit':'Kilometers'})
-    longitude_span: np.ndarray
+    groundpath_span: np.ndarray = field(metadata = {'unit': 'Kilometers'})
     d_ice: float = field(metadata = {'unit': 'Kilometers'})
 
     minumum_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
@@ -37,16 +37,20 @@ class EuteticInterface:
         object.__setattr__(self, 'mean_depth', np.mean(self.depth))
         object.__setattr__(self, 'std', np.std(self.depth))
         depth_to_ocean = self.d_ice - self.depth
-        object.__setattr__(self, 'upwelling_heights', depth_to_ocean[find_peaks(depth_to_ocean)[0]])
-        object.__setattr__(self, 'downwelling_heights', depth_to_ocean[find_peaks(-depth_to_ocean)[0]])
+
         if self.std > 0.01:
-            object.__setattr__(self, 'num_of_convection_cells', self.upwelling_heights.shape[0])
+            object.__setattr__(self, 'upwelling_heights', depth_to_ocean[find_peaks(depth_to_ocean)[0]])
+            object.__setattr__(self, 'downwelling_heights', depth_to_ocean[find_peaks(-depth_to_ocean)[0]])
             object.__setattr__(self, 'avg_upwelling_depth', self.d_ice - np.mean(self.upwelling_heights))
+            object.__setattr__(self, 'num_of_convection_cells', self.upwelling_heights.shape[0])
+            object.__setattr__(self, 'chir', abs((sum(self.upwelling_heights) - sum(self.downwelling_heights)))/self.num_of_convection_cells)    
         else:
+            object.__setattr__(self, 'upwelling_heights', np.empty(0))
+            object.__setattr__(self, 'downwelling_heights', np.empty(0))
             object.__setattr__(self, 'num_of_convection_cells', 0)
-            object.__setattr__(self, 'avg_upwelling_height', 0)
-        object.__setattr__(self, 'chir', (sum(self.upwelling_heights) - sum(self.downwelling_heights))/self.num_of_convection_cells)
-    
+            object.__setattr__(self, 'avg_upwelling_depth', 0)
+            object.__setattr__(self, 'chir', 0)
+
 
     @classmethod
     def from_temp2D(cls, TempProfile2D) -> 'EuteticInterface': # should go in eutetic class
@@ -67,30 +71,29 @@ class EuteticInterface:
         big_df = pd.concat(df_list)
         eutectic_df = (big_df.query("temp <= 240").groupby(['shell_number'])['depth'].max()).reset_index()
         eutectic_df['relative_depth'] = (eutectic_df['depth']/TempProfile2D.d_ice)*100
-        eutectic_df['longitude'] = (eutectic_df['shell_number']/TempProfile2D.nShells)*62
+        eutectic_df['groundpath'] = (eutectic_df['shell_number']/TempProfile2D.nShells)*(2/62*np.pi*1560) # need to grab longitude from somewhere
         eutectic_df['temp'] = big_df.query("temp <= 240").groupby(['shell_number'])['temp'].max().values
 
         return cls(
         df = eutectic_df,
         relative_depth = eutectic_df['relative_depth'].values, 
         depth = eutectic_df['depth'].values,
-        longitude_span = eutectic_df['longitude'].values,
+        groundpath_span = eutectic_df['groundpath'].values,
         d_ice = TempProfile2D.d_ice
         )
-    
+
 
     def calc_sparse_eutectic(self, plot = True, depth_limit = True):
 
         number_of_groups = np.linspace(0, self.relative_depth.shape[0]-1, 25, dtype = int)
         line_segment_list = []
 
-
         for group_index in number_of_groups[:-1]:
             curr_index = np.where(number_of_groups == group_index)[0][0]
             dice_roll = np.random.randint(1, 10)
 
             line_segment_depth = self.relative_depth[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
-            line_segment_angular = self.longitude_span[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
+            line_segment_angular = self.groundpath_span[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
 
             if dice_roll < 7:
                 line_segment_depth = np.zeros(len(line_segment_depth))
@@ -160,10 +163,10 @@ class EuteticInterface:
         fig, ax = plt.subplots()
         ax.add_collection(lc)
         ax.set_ylim(np.min(self.relative_depth)-0.5, np.max(self.relative_depth)+0.5)
-        ax.set_xlim(0,np.max(self.longitude_span))
+        ax.set_xlim(0,np.max(self.groundpath_span))
         ax.invert_yaxis()
 
-        plt.xlabel('Longitude [°]', fontsize = 12)
+        plt.xlabel('Kilometers [Km]', fontsize = 12)
         plt.ylabel('Relative Pen. Depth [%]', fontsize = 12)
         plt.title("Sparse Eutectic Depth")
         plt.grid()
@@ -196,7 +199,7 @@ class EuteticInterface:
 
         
     def __repr__(self):
-        return f'''Longitude: {np.max(self.longitude_span)},
+        return f'''Groundpath Span: {np.max(self.groundpath_span)},
 Standard Deviation: {self.std} Km,
 Relative Depth Penetration Range: {self.minumum_depth} - {self.maximum_depth} Km'''
     
