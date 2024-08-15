@@ -85,12 +85,12 @@ class TempProfile2D(TempProfile1D):
     
     def plot_relative_eutectic_depth(self, peaks = False,folderpath = False):
         relative_depth = self.eutectic.relative_depth
-        groundpath_span = self.eutectic.groundpath_span
+        groundtrack_span = self.eutectic.groundtrack_span
         
         _, ax = plt.subplots(1, 1, figsize = (14, 6))
-        sns.lineplot(x= groundpath_span, y= relative_depth, ax = ax)
+        sns.lineplot(x= groundtrack_span, y= relative_depth, ax = ax)
 
-        plt.xlabel('Groundpath [Km]', fontsize = 12)
+        plt.xlabel('Distance Along Equator [Km]', fontsize = 12)
         plt.ylabel('Relative Pen. Depth [%]', fontsize = 12)
         filename_split = self.filename.split('_')
         viscosity = filename_split[2].split("eta")[-1]
@@ -100,7 +100,7 @@ class TempProfile2D(TempProfile1D):
 
         ax = plt.gca()
         ax.set_ylim(np.min(relative_depth)-4, np.max(relative_depth)+2)
-        ax.set_xlim(0,np.max(groundpath_span))
+        ax.set_xlim(0,np.max(groundtrack_span))
         ax.invert_yaxis()
 
         if peaks:
@@ -108,12 +108,12 @@ class TempProfile2D(TempProfile1D):
             trough_indexes = find_peaks(-relative_depth)[0]
 
             peak_depth = relative_depth[peak_indexes]
-            peak_groundpath = groundpath_span[peak_indexes]
+            peak_groundtrack = groundtrack_span[peak_indexes]
             trough_depth = relative_depth[trough_indexes]
-            trough_groundpath = groundpath_span[trough_indexes]
+            trough_groundtrack = groundtrack_span[trough_indexes]
 
-            sns.scatterplot(x = peak_groundpath, y = peak_depth, color  = 'blue', ax = ax)
-            sns.scatterplot(x = trough_groundpath, y = trough_depth, color = 'red', ax = ax)
+            sns.scatterplot(x = peak_groundtrack, y = peak_depth, color  = 'blue', ax = ax)
+            sns.scatterplot(x = trough_groundtrack, y = trough_depth, color = 'red', ax = ax)
             legend_elements = [Line2D([0], [0], marker = 'o', color='w', label = 'Upwellings', markerfacecolor = 'red', markersize = 7),
                                Line2D([0], [0], marker = 'o', color='w', label='Downwellings', markerfacecolor='blue', markersize=7)]
             ax.legend(handles=legend_elements, loc='upper right')
@@ -125,18 +125,19 @@ class TempProfile2D(TempProfile1D):
         plt.show()
 
 
-    def plot_temp_twod(self, savefolder = None):
+    def plot_temp_twod(self,savefolder = None):
         twod_x_array = self.x_array.reshape([self.nCellsPerShell,  self.nShells])
         twod_y_array = self.y_array.reshape([self.nCellsPerShell,  self.nShells])
         twod_temp_array = self.temp_array.reshape([self.nCellsPerShell,  self.nShells])
+        print(twod_temp_array)
 
-        fig, ax = plt.subplots(1, 1, figsize = (4.5, 10))
-        fontsize = 8
+        _, ax = plt.subplots(1, 1, figsize = (4.5, 10))
+        
 
         cmap = sns.color_palette("inferno", as_cmap = True)
-        cbar_ax = [0, 0.085, 0.9, 0.015]
+        
 
-        conjtourplot = ax.contourf(twod_x_array, twod_y_array, twod_temp_array, np.linspace(self.Ts, self.To,256), cmap = cmap, extend="both")
+        ax.contourf(twod_x_array, twod_y_array, twod_temp_array, np.linspace(self.Ts, self.To,256), cmap = cmap, extend="both")
         ax.axis('off')
 
         if savefolder:
@@ -151,7 +152,7 @@ class TempProfile2D(TempProfile1D):
         to_save_df.rename(columns = {'depth': 'Depth [Km]', 
                                         'shell_number': 'Shell Number', 
                                         'relative_depth':'Relative Depth [%]', 
-                                        'goundpath': 'GroundPath [Km]',
+                                        'goundpath': 'groundtrack [Km]',
                                         'temp': 'Temperature [K]'}, inplace = True)
 
         eutetic_df_filename = self.filename.replace("_2D_data.txt", '_2D_eutectic_data.txt') 

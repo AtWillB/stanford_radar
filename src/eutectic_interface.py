@@ -17,7 +17,7 @@ class EuteticInterface:
     df: pd.DataFrame
     relative_depth: np.ndarray = field(metadata={'unit':'Relative Depth Penetration Percentage'})
     depth: np.ndarray = field(metadata={'unit':'Kilometers'})
-    groundpath_span: np.ndarray = field(metadata = {'unit': 'Kilometers'})
+    groundtrack_span: np.ndarray = field(metadata = {'unit': 'Kilometers'})
     d_ice: float = field(metadata = {'unit': 'Kilometers'})
 
     minumum_depth: float = field(metadata={'unit': 'Kilometers'}, init = False)
@@ -71,14 +71,14 @@ class EuteticInterface:
         big_df = pd.concat(df_list)
         eutectic_df = (big_df.query("temp <= 240").groupby(['shell_number'])['depth'].max()).reset_index()
         eutectic_df['relative_depth'] = (eutectic_df['depth']/TempProfile2D.d_ice)*100
-        eutectic_df['groundpath'] = (eutectic_df['shell_number']/TempProfile2D.nShells)*(2/62*np.pi*1560) # need to grab longitude from somewhere
+        eutectic_df['groundtrack'] = (eutectic_df['shell_number']/TempProfile2D.nShells)*(2*np.pi*(62/360)*1560) # need to grab longitude from somewhere
         eutectic_df['temp'] = big_df.query("temp <= 240").groupby(['shell_number'])['temp'].max().values
 
         return cls(
         df = eutectic_df,
         relative_depth = eutectic_df['relative_depth'].values, 
         depth = eutectic_df['depth'].values,
-        groundpath_span = eutectic_df['groundpath'].values,
+        groundtrack_span = eutectic_df['groundtrack'].values,
         d_ice = TempProfile2D.d_ice
         )
 
@@ -93,7 +93,7 @@ class EuteticInterface:
             dice_roll = np.random.randint(1, 10)
 
             line_segment_depth = self.relative_depth[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
-            line_segment_angular = self.groundpath_span[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
+            line_segment_angular = self.groundtrack_span[number_of_groups[curr_index]:number_of_groups[curr_index+1]+1]
 
             if dice_roll < 7:
                 line_segment_depth = np.zeros(len(line_segment_depth))
@@ -163,7 +163,7 @@ class EuteticInterface:
         fig, ax = plt.subplots()
         ax.add_collection(lc)
         ax.set_ylim(np.min(self.relative_depth)-0.5, np.max(self.relative_depth)+0.5)
-        ax.set_xlim(0,np.max(self.groundpath_span))
+        ax.set_xlim(0,np.max(self.groundtrack_span))
         ax.invert_yaxis()
 
         plt.xlabel('Kilometers [Km]', fontsize = 12)
@@ -199,7 +199,7 @@ class EuteticInterface:
 
         
     def __repr__(self):
-        return f'''Groundpath Span: {np.max(self.groundpath_span)},
+        return f'''groundtrack Span: {np.max(self.groundtrack_span)},
 Standard Deviation: {self.std} Km,
 Relative Depth Penetration Range: {self.minumum_depth} - {self.maximum_depth} Km'''
     
